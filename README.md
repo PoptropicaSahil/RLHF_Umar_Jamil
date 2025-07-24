@@ -72,6 +72,8 @@ The HF implementation takes input a `model` which is of type `PretrainedModel` (
 
 ## Trajectories
 
+### Idea
+
 **POLICY ($\pi$)** \
 Goal in RL is to SELECT A POLICY which maximises the EXPECTED RETURN when the agent acts ACCORDING TO IT
 
@@ -98,13 +100,74 @@ Modelled as stochastic
 s_{t+1} \sim P(\cdot | s_t, a_t)
 ```
 
-**PROBABILITY OF A TRAJECTORY** 
+**PROBABILITY OF A TRAJECTORY** \
+Policy takes input a State and gives probability over actions. <br> 
+All states a $s_0 \xrightarrow{\pi} a_0 \rightarrow s_1 \xrightarrow{\pi} a_2$
 ```math
 P(\tau | \pi) = \rho_{0} (s_0) \prod_{t=0}^{T-1} P(s_{t+1} | s_t, a_t) \pi(a_t | s_t)
 ```
+Where $\rho_{0} (s_0)$ is probability of starting point of trajectory
+
+> Think of term inside product as (action, state) $ \sim a_t, s_t \sim \pi(a_t | s_t) \cdot P(s_{t+1} | s_t, a_t) $. We multiply because all probabilities are independent. 
 
 **DISCOUNTED REWARDS**\
 Since we prefer immediate rewards instead of future
 
 ```math
 R(\tau) = \sum_{t=0}^{\infty} \gamma^{t} r_t
+```
+
+### Trajectories for LMs
+
+Series of prompts (state) and next tokens (actions)
+
+```math
+\tau = (s_0, a_0, s_1, a_1, \dots)
+```
+
+| Timestamp | State $s$ | Action $a$ |
+| --- | --- | --- |
+| 0: $(s_0, a_0)$ | Where is Delhi | Delhi |
+| 1: $(s_1, a_1)$ | Where is Delhi. Delhi | is |
+| 2: $(s_2, a_2)$ | Where is Delhi. Delhi is | in |
+| 3: $(s_3, a_3)$ | Where is Delhi. Delhi is in | India |
+
+
+## Policy Gradient Optimisation
+
+Let policy $\pi_{\theta}$ be parametrised by parameters $\theta$. We want to maximise expected return using te policy i.e.
+
+```math
+J(\pi_{\theta}) = \underset{\tau \sim \pi}{\mathbb{E}}[R(\tau)]
+```
+
+Stochastic *Gradient Ascent* for maximising a function 
+```math
+\theta_{k+1} = \theta_{k} + \alpha \nabla_{\theta} J(\pi_{\theta}) |_{\theta_{k}}
+```
+
+- Gradient of the policy: **policy gradient**
+- Algorithms that optimise the policy: **policy gradient algortihms**
+
+### Derivation of Policy gradient
+
+```math
+\begin{align*}
+\nabla_\theta J(\pi_\theta) &= \nabla_\theta \underset{\tau \sim \pi_{\theta}}{\mathbb{E}}[R(\tau)] \\
+
+&= \nabla_\theta \int_{\tau} P(\tau|\theta) R(\tau) \quad \text{(Expand expectation)} \\
+
+&= \int_{\tau} \nabla_\theta P(\tau|\theta) R(\tau) \quad \text{(Bring gradient under integral)} \\
+
+&= \int_{\tau} P(\tau|\theta) \nabla_\theta \log P(\tau|\theta) R(\tau) \quad \text{(Log-derivative trick)} \\
+
+&= \underset{\tau \sim \pi_{\theta}}{\mathbb{E}}  \left[ \nabla_\theta \log P(\tau|\theta) R(\tau) \right] \quad \text{(Return to expectation form)} \\
+
+\end{align*}
+```
+
+```math
+\therefore \nabla_\theta J(\pi_\theta) = \underset{\tau \sim \pi_{\theta}}{\mathbb{E}} \left[ \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t|s_t) R(\tau) \right] \quad \text{(Expression for grad-log-prob)}
+```
+
+> The Log-derivative trick is like $\nabla_\theta \log \left[ P(\tau|\theta) \right] = \dfrac{1}{P(\tau|\theta)} \nabla_\theta P(\tau|\theta) \implies \nabla_\theta P(\tau|\theta) = P(\tau|\theta) \nabla_\theta \log P(\tau|\theta)$ 
