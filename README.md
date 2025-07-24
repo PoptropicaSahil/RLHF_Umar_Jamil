@@ -58,11 +58,12 @@ We use the hidden state of the last token of the response, send it to a Linear l
 
 Given that we have a dataset that defines which answer we liked based on a query, we can build a neural network that gives us a numeric score for each response. ***WHAT?***
 
-$$ Loss = - \log \sigma ( r(x, y_{\text{winning answer}}) - r(x, y_{\text{losing answer}}) ) $$
-
+```math
+Loss = - \log \sigma ( r(x, y_{\text{winning answer}}) - r(x, y_{\text{losing answer}}) )
+```
 Loss is small when order is correct, very large when order is wrong.
 
-> Remember $ \sigma (x) = \dfrac{1}{1 + e^{-x}}$. It gives > 0.5 for positive $x$, < 0.5 for negative $x$
+> Remember $\sigma (x) = \dfrac{1}{1 + e^{-x}}$. It gives > 0.5 for positive $x$, < 0.5 for negative $x$
 
 The HF implementation takes input a `model` which is of type `PretrainedModel` (same as `AutoModelForSequenceClassification`) which is an LM with a head on top (same as above!)
 
@@ -74,23 +75,36 @@ The HF implementation takes input a `model` which is of type `PretrainedModel` (
 **POLICY ($\pi$)** \
 Goal in RL is to SELECT A POLICY which maximises the EXPECTED RETURN when the agent acts ACCORDING TO IT
 
-$$ \pi^{*} = \underset{\pi}{\argmax} ~ J(\pi) $$
+```math
+\pi^{*} = \underset{\pi}{\argmax} ~ J(\pi)
+```
 
 **RETURN ($J$)** \
 Expected return of a policy is the expected return over all possible trajectories 
-$$ J(\pi) = \underset{\tau \sim \pi}{\mathbb{E}}[R(\tau)] = \int_{\tau} P(\tau | \pi) R(\tau) $$
+```math
+J(\pi) = \underset{\tau \sim \pi}{\mathbb{E}}[R(\tau)] = \int_{\tau} P(\tau | \pi) R(\tau)
+```
 
 **TRAJECTORY ($\tau$)** \
 Series of (action, state), starting from an initial state
-$$ \tau = (s_0, a_0, s_1, a_1, \dots) $$
+
+```math
+\tau = (s_0, a_0, s_1, a_1, \dots)
+```
 
 **STATE ($s$)** \
 Modelled as stochastic
-$$ s_{t+1} \sim P(\cdot | s_t, a_t) $$
+```math
+s_{t+1} \sim P(\cdot | s_t, a_t)
+```
 
 **PROBABILITY OF A TRAJECTORY** 
-$$ P(\tau | \pi) = \rho_{0} (s_0) \prod_{t=0}^{T-1} P(s_{t+1} | s_t, a_t) \pi(a_t | s_t) $$
+```math
+P(\tau | \pi) = \rho_{0} (s_0) \prod_{t=0}^{T-1} P(s_{t+1} | s_t, a_t) \pi(a_t | s_t)
+```
 
 **DISCOUNTED REWARDS**\
 Since we prefer immediate rewards instead of future
-$$ R(\tau) = \sum_{t=0}^{\infty} \gamma^{t} r_t $$
+
+```math
+R(\tau) = \sum_{t=0}^{\infty} \gamma^{t} r_t
