@@ -195,7 +195,7 @@ P(\tau | \pi_\theta) &= \rho_{0} (s_0) \prod_{t=0}^{T-1} P(s_{t+1} | s_t, a_t) \
 \nabla_\theta \log P(\tau|\theta) &= \nabla_\theta \log \rho_{0} (s_0) + \sum_{t=0}^{T}
 \left( \nabla_\theta \log P(s_{t+1}| s_t, a_t) +  \nabla_\theta \log \pi_\theta(a_t | s_t) \right) \\ 
 
-&= \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t | s_t)  \quad \text{(only last term survives since others don't have $\theta$)}
+&= \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t | s_t)  \quad \text{(only last term survives since others don't have $\theta$)} \\
 
 \end{align*}
 ```
@@ -235,7 +235,7 @@ Remember how the reward model is the LM with a linear layer!
 
 ## Problems with Gradient Policy Optimisation
 
-1. We use a sample mean for gradient approximation -- will exhibit high variance (for small samples)
+1. *We use a sample mean for gradient approximation -- will exhibit high variance (for small samples)*
 
 > Note: this is an unbiased estimator since it will converage to the true gradient
 
@@ -255,7 +255,7 @@ Remember how the gradient estimator multiplies the *gradient of the log probs of
 \end{align*}
 ```
 
-The term $ \sum_{t'=t}^{T} r(s_{i,t'}, a_{i,t'})$ is commonly known as **rewards to go**, i.e. total reward if we start from $t=t'$ and act according to the policy
+The term $\sum_{t'=t}^{T} r(s_{i,t'}, a_{i,t'})$ is commonly known as **rewards to go**, i.e. total reward if we start from $t=t'$ and act according to the policy
 
 > Removing the initial terms results in less terms and hence less noise (variance)
 
@@ -277,7 +277,73 @@ As a baseline we choose a **VALUE FUNCTION** $V^{\pi}(s)$ that indicates what is
 
 > Remember each prompt is a state!
 
-## Estimating Value function $V^{\pi}(s)$
+### Estimating Value function $V^{\pi}(s)$
+
+**Additional** linear layer on top of LM (i.e. policy $\pi_theta$) that estimates the value of a state at a particular time step. As expected, the layer has only one output feature.
+
+> This is another layer than the Linear layer to transform hidden states to logits!
+
+<img src="readme-images/value-func.png" alt="drawing" width="750"/>
 
 
+### Reducing variance - Q and V
 
+The **rewards to go** in RL is the **$Q$ function**, indicating the expected return if the agent starts at state $s$, takes action $a$ and acts according to policy $\pi$. <br>
+The baseline function, also called value function is **$V$ function** <br>
+Together, $Q^{\pi}(s,a) - V^{\pi}(s)$ is also known as the **advantage function** **$A$**
+
+```math
+\begin{align*}
+
+\nabla_\theta J(\pi_\theta) &\approx \dfrac{1}{N} \sum_{i=1}^{N} \left( \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_{i, t}|s_{i, t}) \right) \left( \sum_{t'=t}^{T} r(s_{i,t'}, a_{i,t'})\right)  \\
+
+&\approx \dfrac{1}{N} \sum_{i=1}^{N} \left( \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_{i, t}|s_{i, t}) \right) \left( Q^{\pi}(s_t,a_t) - V^{\pi}(s_t) \right)  \\
+
+&\approx \dfrac{1}{N} \sum_{i=1}^{N} \left( \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_{i, t}|s_{i, t}) \right) \left( A^{\pi}(s_t,a_t) \right) 
+
+\end{align*}
+```
+
+Where **$Q$** function is like Expected reward when at $(s_t, a_t)$ and remaining discounted reward when following the rest of the trajectory
+
+```math
+Q^{\pi}(s,a) = \underset{s'}{\mathbb{E}} \left[ r(s,a) + \gamma \underset{s'}{\mathbb{E}} \left[  Q^{\pi}(s', a')\right] \right] 
+```
+
+> **IMPORTANT:** Value function **$V$** is like Expected reward when at $s_t$ and following the policy. Hence the Advantage function **$A$** tells **show better is to choose a particular action $a$ in a state $s$ over** the average expected reward when **choosing randomly an action** in the same state $s$.
+
+### Estimating the advantage term
+
+Remember $Q$ function estimates reward from a $(s_t, a_t)$ i.e. $r(s_t, a_t) + \gamma r(s_{t+1}, a_{t+1}) + \gamma^2 r(s_{t+2}, a_{t+2}) + \gamma^3 r(s_{t+3}, a_{t+3}) \dots$
+
+We can estimate the future values directly using the $V$ function
+
+```math
+\begin{align*}
+
+\hat{A}^{\pi}(s_t, a_t) &= [r(s_t, a_t) + \gamma V^{\pi}(s_{t+1})] - V^{\pi}(s_t) \\
+&= [r(s_t, a_t) + \gamma r(s_{t+1}, a_{t+1}) + \gamma^2 V{\pi}(s_{t+2})] - V^{\pi}(s_t) \\
+&= [r(s_t, a_t) + \gamma r(s_{t+1}, a_{t+1}) + \gamma^2 r(s_{t+2}, a_{t+2})  + \gamma^3 V^{\pi}(s_{t+3})] - V^{\pi}(s_t) \\
+
+\end{align*}
+```
+- If we stop too early - high bias since only one *real* reward was taken
+- If we stop too late - high variance
+
+Take weighted sum to obtain the **Generalised Advantage Function** (recursive formula)
+
+```math
+\begin{align*}
+\delta_{t} &= r_t + \gamma V^{\pi}(s_{t+1}) - V^{\pi}(s_t) \\
+\hat{A}_t &= \delta_{t} + \gamma \lambda \hat{A}_{t+1}
+\end{align*}
+```
+
+> Start from the last term and estimate backwards. Furture things only for first time are 0 eg, $A_3 = \delta_{3} + \gamma \cdot \lambda \cdot 0$
+
+
+### Advantage term for LMs
+
+We tell the policy (LM) to increase the likelihood of choosing the next token, given a prompt (state) that expected leads to *better than average* rewards. LM will be forced to choose tokens that will more likely lead to future tokens that comply with its reward model. 
+
+1. *The expectation forces us to sample trajectories from our neural network every time we update the parameters*
