@@ -170,4 +170,114 @@ Stochastic *Gradient Ascent* for maximising a function
 \therefore \nabla_\theta J(\pi_\theta) = \underset{\tau \sim \pi_{\theta}}{\mathbb{E}} \left[ \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t|s_t) R(\tau) \right] \quad \text{(Expression for grad-log-prob)}
 ```
 
-> The Log-derivative trick is like $\nabla_\theta \log \left[ P(\tau|\theta) \right] = \dfrac{1}{P(\tau|\theta)} \nabla_\theta P(\tau|\theta) \implies \nabla_\theta P(\tau|\theta) = P(\tau|\theta) \nabla_\theta \log P(\tau|\theta)$ 
+This  gradient is expectation over ALL policies( $\tau \sim \pi_\theta$) which can be a huge computation. We can approximate the gradient with a **SAMPLE MEAN** by collecting a set $\mathcal{D}$ of trajectories
+
+```math
+\hat{g} = \dfrac{1}{|\mathcal{D}|} \sum_{\tau \in \mathcal{D}} \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t|s_t) R(\tau)
+```
+
+IMPORTANT : *The gradient estimator above multiplies the gradient of the log probs of each action in the current trajectory with the **rewards obtained in the entire trajectory.***
+
+> Note: derivations given below
+
+**Log-derivative trick** \
+$\nabla_\theta \log \left[ P(\tau|\theta) \right] = \dfrac{1}{P(\tau|\theta)} \nabla_\theta P(\tau|\theta) \implies  P(\tau|\theta) \nabla_\theta \log \left[ P(\tau|\theta) \right] = \nabla_\theta P(\tau|\theta) $ 
+
+**Expression for grad-log-prob** 
+
+```math
+\begin{align*}
+
+P(\tau | \pi_\theta) &= \rho_{0} (s_0) \prod_{t=0}^{T-1} P(s_{t+1} | s_t, a_t) \pi(a_t | s_t) \\
+
+\log P(\tau| \pi_\theta) &=  \log \left[ \rho_{0} (s_0) \right]  + \sum_{t=0}^{T-1} \left(  \log P(s_{t+1}| s_t, a_t) + \log \pi_\theta(a_t | s_t) \right) \\ 
+
+\nabla_\theta \log P(\tau|\theta) &= \nabla_\theta \log \rho_{0} (s_0) + \sum_{t=0}^{T}
+\left( \nabla_\theta \log P(s_{t+1}| s_t, a_t) +  \nabla_\theta \log \pi_\theta(a_t | s_t) \right) \\ 
+
+&= \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t | s_t)  \quad \text{(only last term survives since others don't have $\theta$)}
+
+\end{align*}
+```
+
+## RECAP - REINFORCE Algorithm!
+> We have an expression of the gradient of the expected reward w.r.t. parameters $\theta$ and approximated it using a sample mean $\hat{g}$
+
+How to proceed
+
+1. Create a NN that defines a policy (INPUT: current state of an agent OUTPUT: probability over the action space) -- ***Value based!?***
+1. Use the NN to sample trajectories and their corresponding rewards 
+1. Use sample to calculate the (approximated) gradient
+1. Run stochastic gradient ascent to update the parameters of the policy
+1. Repeat from #2
+
+
+```math
+\begin{align*}
+\hat{g} &= \dfrac{1}{|\mathcal{D}|} \sum_{\tau \in \mathcal{D}} \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t|s_t) R(\tau) \\
+\theta_{k+1} &= \theta_{k} + \alpha \nabla_\theta J(\pi_\theta) |_{\theta_{k}} \\
+\end{align*}
+```
+
+> *To generate trajectories for LMs*, we use questions from the dataset of preferences used earlier - model generates answer. We calculate the reward for the generated answer and train the model according to the approximated gradient of the policy. Since text generation results in a series of states (prompts) and actions (next tokens) we obtain a series of trajectories. 
+
+
+### Calculating log probabilities of our policy (LM)
+
+<img src="readme-images/log-probs.png" alt="drawing" width="750"/>
+
+### Calculating rewards for each trajectories
+
+Remember how the reward model is the LM with a linear layer!
+
+<img src="readme-images/rewards.png" alt="drawing" width="750"/>
+
+
+## Problems with Gradient Policy Optimisation
+
+1. We use a sample mean for gradient approximation -- will exhibit high variance (for small samples)
+
+> Note: this is an unbiased estimator since it will converage to the true gradient
+
+### Reducing variance - rewards to go
+
+Remember how the gradient estimator multiplies the *gradient of the log probs of each action in the current trajectory* with the **rewards obtained in the entire trajectory**.
+
+```math
+\begin{align*}
+
+\nabla_\theta J(\pi_\theta) &= \underset{\tau \sim \pi_{\theta}}{\mathbb{E}} \left[ \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_t|s_t) R(\tau) \right] \\
+
+&\approx \dfrac{1}{N} \sum_{i=1}^{N} \left( \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_{i, t}|s_{i, t}) \right) \left( \sum_{t=0}^{T} r(s_{i,t}, a_{i,t})\right) \\
+
+&\approx \dfrac{1}{N} \sum_{i=1}^{N} \left( \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_{i, t}|s_{i, t}) \right) \left( \sum_{t'=t}^{T} r(s_{i,t'}, a_{i,t'})\right) \quad \text{apparently it has been proven that past terms cancel out in expectation}
+
+\end{align*}
+```
+
+The term $ \sum_{t'=t}^{T} r(s_{i,t'}, a_{i,t'})$ is commonly known as **rewards to go**, i.e. total reward if we start from $t=t'$ and act according to the policy
+
+> Removing the initial terms results in less terms and hence less noise (variance)
+
+### Reducing variance - subtract a baseline
+
+Subtracting a baseline from the rewards to go still results in an unbiased estimator of the gradient
+
+```math
+\begin{align*}
+
+\nabla_\theta J(\pi_\theta) &\approx \dfrac{1}{N} \sum_{i=1}^{N} \left( \sum_{t=0}^{T} \nabla_\theta \log \pi_\theta(a_{i, t}|s_{i, t}) \right) \left( \sum_{t'=t}^{T} r(s_{i,t'}, a_{i,t'}) - b \right) \quad \text{baseline $b$ can also be dependent on the state}
+
+\end{align*}
+```
+
+As a baseline we choose a **VALUE FUNCTION** $V^{\pi}(s)$ that indicates what is the future expected reward if the agent **IS IN STATE** $s$ and acts according to policy. For example - 
+- Value function should be high for *Where is Delhi? Delhi is*
+- Value function should be low for *Where is Delhi? Chocolate muffins*
+
+> Remember each prompt is a state!
+
+## Estimating Value function $V^{\pi}(s)$
+
+
+
